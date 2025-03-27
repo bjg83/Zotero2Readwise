@@ -1,9 +1,11 @@
+# Import required libraries
 from argparse import ArgumentParser
 from distutils.util import strtobool
 
 from zotero2readwise.helper import write_library_version, read_library_version
 from zotero2readwise.zt2rw import Zotero2Readwise
 
+# Define constants for argument help messages
 READWISE_TOKEN_HELP = "Readwise Access Token (visit https://readwise.io/access_token)"
 ZOTERO_KEY_HELP = "Zotero API key (visit https://www.zotero.org/settings/keys)"
 ZOTERO_LIBRARY_ID_HELP = "Zotero User ID (visit https://www.zotero.org/settings/keys)"
@@ -14,7 +16,9 @@ FILTER_COLOR_HELP = ("Filter Zotero annotations by given color | Options: '#ffd4
                      "(green), '#2ea8e5' (blue), '#a28ae5' (purple), '#e56eee' (magenta), '#f19837' (orange), '#aaaaaa' (grey)")
 USE_SINCE_HELP = "Include Zotero items since last run"
 
+
 def parse_arguments():
+    """Parse command-line arguments."""
     parser = ArgumentParser(description="Generate Markdown files")
     parser.add_argument("readwise_token", help=READWISE_TOKEN_HELP)
     parser.add_argument("zotero_key", help=ZOTERO_KEY_HELP)
@@ -26,14 +30,18 @@ def parse_arguments():
     parser.add_argument("--use_since", action='store_true', help=USE_SINCE_HELP)
     return vars(parser.parse_args())
 
+
 def cast_bool_args(args):
+    """Cast boolean arguments to actual boolean values."""
     for bool_arg in ["include_annotations", "include_notes"]:
         try:
             args[bool_arg] = bool(strtobool(args[bool_arg]))
         except ValueError:
             raise ValueError(f"Invalid value for --{bool_arg}. Use 'n' or 'y' (default).")
 
+
 def main():
+    """Main entry point of the script."""
     args = parse_arguments()
     cast_bool_args(args)
     
@@ -52,6 +60,7 @@ def main():
     
     if args["use_since"]:
         write_library_version(zt2rw.zotero_client)
+
 
 if __name__ == "__main__":
     main()
