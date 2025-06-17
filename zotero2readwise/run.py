@@ -3,7 +3,7 @@ from argparse import ArgumentParser
 from distutils.util import strtobool
 
 from zotero2readwise.helper import write_library_version, read_library_version
-from zotero2readwise.logging_utils import setup_logger
+from zotero2readwise.loggingutils import setup_logger
 from zotero2readwise.readwise import Readwise
 from zotero2readwise.zt2rw import Zotero2Readwise
 
