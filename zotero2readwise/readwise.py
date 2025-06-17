@@ -79,6 +79,110 @@ class Readwise:
     def convert_tags_to_readwise_format(tags: List[str]) -> str:
         return " ".join([f".{sanitize_tag(t.lower())}" for t in tags])
 
+    def roman_to_int(roman_str: str) -> int:
+    """
+    Convert Roman numerals to integers.
+    Handles both uppercase and lowercase roman numerals.
+    """
+    if not roman_str:
+        return 0
+        
+    # Convert to uppercase for processing
+    roman_str = roman_str.upper().strip()
+    
+    # Roman numeral mapping
+    roman_values = {
+        'I': 1, 'V': 5, 'X': 10, 'L': 50, 
+        'C': 100, 'D': 500, 'M': 1000
+    }
+    
+    total = 0
+    prev_value = 0
+    
+    # Process from right to left
+    for char in reversed(roman_str):
+        if char not in roman_values:
+            return 0  # Invalid roman numeral
+            
+        value = roman_values[char]
+        
+        # If current value is less than previous, subtract it (e.g., IV = 4)
+        if value < prev_value:
+            total -= value
+        else:
+            total += value
+            
+        prev_value = value
+    
+    return total
+
+def is_roman_numeral(text: str) -> bool:
+    """
+    Check if a string is a valid Roman numeral.
+    """
+    if not text:
+        return False
+        
+    # Clean the text
+    text = text.upper().strip()
+    
+    # Check if it only contains valid Roman numeral characters
+    valid_chars = set('IVXLCDM')
+    if not all(char in valid_chars for char in text):
+        return False
+    
+    # Additional validation: try to convert and see if it's reasonable
+    try:
+        value = roman_to_int(text)
+        # Roman numerals for front matter typically don't exceed 50
+        return 1 <= value <= 100
+    except:
+        return False
+
+def parse_page_label(page_label: str) -> tuple:
+    """
+    Parse a page label and return (numeric_value, is_roman, original_label).
+    
+    Returns:
+        tuple: (int, bool, str) - (numeric_value, is_roman_numeral, original_label)
+    """
+    if not page_label:
+        return (0, False, "")
+    
+    # Clean the page label
+    cleaned = page_label.strip()
+    
+    # Check if it's a regular number
+    if cleaned.isdigit():
+        return (int(cleaned), False, cleaned)
+    
+    # Check if it's a Roman numeral
+    if is_roman_numeral(cleaned):
+        # Convert Roman numeral but give it negative value for sorting
+        # This ensures Roman numerals come before regular page numbers
+        roman_value = roman_to_int(cleaned)
+        return (-roman_value, True, cleaned)
+    
+    # Handle mixed cases like "iv-v" or "pp. 23-24"
+    # Extract the first number/roman numeral found
+    import re
+    
+    # Try to find Roman numerals first
+    roman_match = re.search(r'\b([ivxlcdm]+)\b', cleaned, re.IGNORECASE)
+    if roman_match:
+        roman_part = roman_match.group(1)
+        if is_roman_numeral(roman_part):
+            roman_value = roman_to_int(roman_part)
+            return (-roman_value, True, cleaned)
+    
+    # Try to find regular numbers
+    number_match = re.search(r'\b(\d+)\b', cleaned)
+    if number_match:
+        return (int(number_match.group(1)), False, cleaned)
+    
+    # If nothing found, return 0
+    return (0, False, cleaned)
+    
     def format_readwise_note(self, tags, comment) -> Union[str, None]:
         rw_tags = self.convert_tags_to_readwise_format(tags)
         highlight_note = ""
@@ -89,36 +193,61 @@ class Readwise:
         return highlight_note if highlight_note else None
 
     def convert_zotero_annotation_to_readwise_highlight(
-        self, annot: ZoteroItem
-    ) -> ReadwiseHighlight:
+    self, annot: ZoteroItem
+) -> ReadwiseHighlight:
 
-        highlight_note = self.format_readwise_note(
-            tags=annot.tags, comment=annot.comment
-        )
-        if annot.page_label and annot.page_label.isnumeric():
-            location = int(annot.page_label)
-        else:
-            location = 0
-        highlight_url = None
-        if annot.attachment_url is not None:
-            attachment_id = annot.attachment_url.split("/")[-1]
-            annot_id = annot.annotation_url.split("/")[-1]
-            highlight_url = f'zotero://open-pdf/library/items/{attachment_id}?page={location}%&annotation={annot_id}'
-        return ReadwiseHighlight(
-            text=annot.text,
-            title=annot.title,
-            note=highlight_note,
-            author=annot.creators,
-            category=Category.articles.name
-            if annot.document_type != "book"
-            else Category.books.name,
-            highlighted_at=annot.annotated_at,
-            source_url=annot.source_url,
-            highlight_url=annot.annotation_url
-            if highlight_url is None
-            else highlight_url,
-            location=location,
-        )
+    highlight_note = self.format_readwise_note(
+        tags=annot.tags, comment=annot.comment
+    )
+    
+    # IMPROVED LOCATION LOGIC WITH ROMAN NUMERAL SUPPORT
+    location = None
+    location_type = "order"
+    
+    if annot.sort_index is not None:
+        # Use Zotero's sort index as the primary location indicator
+        location = annot.sort_index
+    elif annot.page_label:
+        # Parse the page label (handles both numeric and Roman numerals)
+        numeric_value, is_roman, original_label = parse_page_label(annot.page_label)
+        if numeric_value != 0:
+            location = numeric_value
+            location_type = "page"
+        # Note: negative values for Roman numerals will sort before positive values
+    
+    highlight_url = None
+    if annot.attachment_url is not None:
+        attachment_id = annot.attachment_url.split("/")[-1]
+        annot_id = annot.annotation_url.split("/")[-1]
+        
+        # For Zotero URL, use the original page label if available
+        page_for_url = annot.page_label if annot.page_label else "1"
+        # Convert Roman numerals to approximate page numbers for the URL
+        if annot.page_label:
+            _, is_roman, _ = parse_page_label(annot.page_label)
+            if is_roman:
+                # For Roman numerals, convert to positive number for URL
+                roman_value = abs(location) if location else 1
+                page_for_url = str(roman_value)
+        
+        highlight_url = f'zotero://open-pdf/library/items/{attachment_id}?page={page_for_url}&annotation={annot_id}'
+    
+    return ReadwiseHighlight(
+        text=annot.text,
+        title=annot.title,
+        note=highlight_note,
+        author=annot.creators,
+        category=Category.articles.name
+        if annot.document_type != "book"
+        else Category.books.name,
+        highlighted_at=annot.annotated_at,
+        source_url=annot.source_url,
+        highlight_url=annot.annotation_url
+        if highlight_url is None
+        else highlight_url,
+        location=location,
+        location_type=location_type,
+    )
 
     def post_zotero_annotations_to_readwise(
         self, zotero_annotations: List[ZoteroItem]
