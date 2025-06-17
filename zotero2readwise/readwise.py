@@ -5,6 +5,9 @@ from typing import Dict, List, Optional, Union
 
 import requests
 
+import logging
+from .logging_utils import setup_logger
+
 from zotero2readwise import FAILED_ITEMS_DIR
 from zotero2readwise.exception import Zotero2ReadwiseError
 from zotero2readwise.helper import sanitize_tag
@@ -51,28 +54,34 @@ class ReadwiseHighlight:
 
 
 class Readwise:
-    def __init__(self, readwise_token: str):
+    def __init__(self, readwise_token: str, logger=None):
         self._token = readwise_token
         self._header = {"Authorization": f"Token {self._token}"}
         self.endpoints = ReadwiseAPI
         self.failed_highlights: List = []
+        self.logger = logger or setup_logger("zotero2readwise.readwise")
 
     def create_highlights(self, highlights: List[Dict]) -> None:
-        resp = requests.post(
-            url=self.endpoints.highlights,
-            headers=self._header,
-            json={"highlights": highlights},
-        )
-        if resp.status_code != 200:
-            error_log_file = (
-                f"error_log_{resp.status_code}_failed_post_request_to_readwise.json"
+        try:
+            resp = requests.post(
+                url=self.endpoints.highlights,
+                headers=self._header,
+                json={"highlights": highlights},
+                timeout=30  # Recommend setting a timeout
             )
-            with open(error_log_file, "w") as f:
-                dump(resp.json(), f)
+            resp.raise_for_status()
+        except requests.RequestException as e:
+            error_log_file = (
+                f"error_log_failed_post_request_to_readwise.json"
+            )
+            self.logger.error(f"Failed to upload highlights to Readwise: {e}")
+            if resp is not None:
+                with open(error_log_file, "w") as f:
+                    dump(resp.json(), f)
+                self.logger.error(f"API response saved to {error_log_file}")
             raise Zotero2ReadwiseError(
-                f"Uploading to Readwise failed with following details:\n"
-                f"POST request Status Code={resp.status_code} ({resp.reason})\n"
-                f"Error log is saved to {error_log_file} file."
+                f"Uploading to Readwise failed: {e}\n"
+                f"See error log at {error_log_file}"
             )
 
     @staticmethod
@@ -150,43 +159,31 @@ class Readwise:
             return (doc_key, 2, 0, annotation.annotated_at)
         return sorted(formatted_annots, key=get_sort_key)
 
-    def post_zotero_annotations_to_readwise(
-        self, zotero_annotations: List[ZoteroItem]
-    ) -> None:
-        print(
-            f"\nReadwise: Push {len(zotero_annotations)} Zotero annotations/notes to Readwise...\n"
-            f"It may take some time depending on the number of highlights...\n"
-            f"A complete message will show up once it's done!\n"
+    def post_zotero_annotations_to_readwise(self, zotero_annotations: List[ZoteroItem]) -> None:
+        self.logger.info(
+            f"Readwise: Pushing {len(zotero_annotations)} Zotero annotations/notes to Readwise..."
         )
         rw_highlights = []
         for annot in zotero_annotations:
             try:
                 if len(annot.text) >= 8191:
-                    print(
-                        f"A Zotero annotation from an item with {annot.title} (item_key={annot.key} and "
-                        f"version={annot.version}) cannot be uploaded since the highlight/note is very long. "
-                        f"A Readwise highlight can be up to 8191 characters."
+                    self.logger.warning(
+                        f"Highlight too long for Readwise: {annot.title} (item_key={annot.key})"
                     )
                     self.failed_highlights.append(annot.get_nonempty_params())
-                    continue  # Go to next annot
-                rw_highlight = self.convert_zotero_annotation_to_readwise_highlight(
-                    annot
+                    continue
+                rw_highlight = self.convert_zotero_annotation_to_readwise_highlight(annot)
+            except Exception as e:
+                self.logger.error(
+                    f"Failed to convert annotation {getattr(annot, 'key', '?')}: {e}"
                 )
-            except Exception:
                 self.failed_highlights.append(annot.get_nonempty_params())
-                continue  # Go to next annot
+                continue
             rw_highlights.append(rw_highlight.get_nonempty_params())
         self.create_highlights(rw_highlights)
-
-        finished_msg = ""
-        if self.failed_highlights:
-            finished_msg = (
-                f"\nNOTE: {len(self.failed_highlights)} highlights (out of {len(self.failed_highlights)}) failed "
-                f"to upload to Readwise.\n"
-            )
-
-        finished_msg += f"\n{len(rw_highlights)} highlights were successfully uploaded to Readwise.\n\n"
-        print(finished_msg)
+        self.logger.info(
+            f"{len(rw_highlights)} highlights uploaded, {len(self.failed_highlights)} failed."
+        )
 
     def save_failed_items_to_json(self, json_filepath_failed_items: str = None):
         FAILED_ITEMS_DIR.mkdir(parents=True, exist_ok=True)
