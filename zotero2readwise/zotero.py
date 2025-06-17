@@ -56,7 +56,6 @@ class ZoteroItem:
                 creators_str += et_al
             self.creators = creators_str
 
-
     def get_nonempty_params(self) -> Dict:
         return {k: v for k, v in self.__dict__.items() if v}
 
@@ -122,65 +121,65 @@ class ZoteroAnnotationsNotes:
         self._parent_mapping: Dict = {}
         self.filter_colors: List[str] = filter_colors
 
- def get_item_metadata(self, annot: Dict) -> Dict:
-    data = annot["data"]
-    # A Zotero annotation or note must have a parent with parentItem key.
-    parent_item_key = data["parentItem"]
-    
-    if parent_item_key in self._parent_mapping:
-        top_item_key = self._parent_mapping[parent_item_key]
-        if top_item_key in self._cache:
-            return self._cache[top_item_key]
-    else:
-        parent_item = self.zot.item(parent_item_key)
-        top_item_key = parent_item["data"].get("parentItem", None)
-        self._parent_mapping[parent_item_key] = (
-            top_item_key if top_item_key else parent_item_key
-        )
+    def get_item_metadata(self, annot: Dict) -> Dict:
+        data = annot["data"]
+        # A Zotero annotation or note must have a parent with parentItem key.
+        parent_item_key = data["parentItem"]
+        
+        if parent_item_key in self._parent_mapping:
+            top_item_key = self._parent_mapping[parent_item_key]
+            if top_item_key in self._cache:
+                return self._cache[top_item_key]
+        else:
+            parent_item = self.zot.item(parent_item_key)
+            top_item_key = parent_item["data"].get("parentItem", None)
+            self._parent_mapping[parent_item_key] = (
+                top_item_key if top_item_key else parent_item_key
+            )
 
-    if top_item_key:
-        top_item = self.zot.item(top_item_key)
-        data = top_item["data"]
-    else:
-        top_item = parent_item
-        data = top_item["data"]
-        top_item_key = data["key"]
+        if top_item_key:
+            top_item = self.zot.item(top_item_key)
+            data = top_item["data"]
+        else:
+            top_item = parent_item
+            data = top_item["data"]
+            top_item_key = data["key"]
 
-    metadata = {
-        "title": data["title"],
-        # "date": data["date"],
-        "tags": data["tags"],
-        "document_type": data["itemType"],
-        "source_url": top_item["links"]["alternate"]["href"],
-        "creators": "",
-        "attachment_url": "",
-    }
-    if "creators" in data:
-        # Filter to only include creators with creatorType == "author"
-        authors = [
-            creator for creator in data["creators"] 
-            if creator.get("creatorType") == "author"
-        ]
-        formatted_authors = []
-        for creator in authors:
-            if "name" in creator:  # Corporate/institutional author
-                formatted_authors.append(creator["name"])
-            else:  # Individual author
-                name_parts = []
-                if creator.get("firstName"):
-                    name_parts.append(creator["firstName"])
-                if creator.get("lastName"):
-                    name_parts.append(creator["lastName"])
-                if name_parts:
-                    formatted_authors.append(" ".join(name_parts))
-        metadata["creators"] = formatted_authors
-    if "attachment" in top_item["links"] and top_item["links"]["attachment"]["attachmentType"] == "application/pdf":
-        metadata["attachment_url"] = top_item["links"]["attachment"]["href"]
+        metadata = {
+            "title": data["title"],
+            # "date": data["date"],
+            "tags": data["tags"],
+            "document_type": data["itemType"],
+            "source_url": top_item["links"]["alternate"]["href"],
+            "creators": "",
+            "attachment_url": "",
+        }
+        if "creators" in data:
+            # Filter to only include creators with creatorType == "author"
+            authors = [
+                creator for creator in data["creators"] 
+                if creator.get("creatorType") == "author"
+            ]
+            formatted_authors = []
+            for creator in authors:
+                if "name" in creator:  # Corporate/institutional author
+                    formatted_authors.append(creator["name"])
+                else:  # Individual author
+                    name_parts = []
+                    if creator.get("firstName"):
+                        name_parts.append(creator["firstName"])
+                    if creator.get("lastName"):
+                        name_parts.append(creator["lastName"])
+                    if name_parts:
+                        formatted_authors.append(" ".join(name_parts))
+            metadata["creators"] = formatted_authors
+        if "attachment" in top_item["links"] and top_item["links"]["attachment"]["attachmentType"] == "application/pdf":
+            metadata["attachment_url"] = top_item["links"]["attachment"]["href"]
 
-    self._cache[top_item_key] = metadata
-    return metadata
+        self._cache[top_item_key] = metadata
+        return metadata
 
-   def format_item(self, annot: Dict) -> ZoteroItem:
+    def format_item(self, annot: Dict) -> ZoteroItem:
         data = annot["data"]
         item_type = data["itemType"]
         annotation_type = data.get("annotationType")
@@ -232,7 +231,7 @@ class ZoteroAnnotationsNotes:
             parent_item_key=data.get("parentItem")  # ADD THIS LINE
         )
 
-def format_items(self, annots: List[Dict]) -> List[ZoteroItem]:
+    def format_items(self, annots: List[Dict]) -> List[ZoteroItem]:
         formatted_annots = []
         print(
             f"ZOTERO: Start formatting {len(annots)} annotations/notes...\n"
@@ -259,7 +258,7 @@ def format_items(self, annots: List[Dict]) -> List[ZoteroItem]:
         print(finished_msg)
         return formatted_annots
 
-        def sort_annotations_by_reading_order(self, formatted_annots: List[ZoteroItem]) -> List[ZoteroItem]:
+    def sort_annotations_by_reading_order(self, formatted_annots: List[ZoteroItem]) -> List[ZoteroItem]:
         """Sort annotations by document and reading order within each document"""
         return sorted(formatted_annots, key=lambda x: (
             x.parent_item_key or "",  # Group by document
@@ -268,13 +267,13 @@ def format_items(self, annots: List[Dict]) -> List[ZoteroItem]:
             x.annotated_at  # Finally by date as last resort
         ))
          
-def save_failed_items_to_json(self, json_filepath_failed_items: str = None):
-            FAILED_ITEMS_DIR.mkdir(parents=True, exist_ok=True)
-            if json_filepath_failed_items:
-                out_filepath = FAILED_ITEMS_DIR.joinpath(json_filepath_failed_items)
-            else:
-                out_filepath = FAILED_ITEMS_DIR.joinpath("failed_zotero_items.json")
-    
-            with open(out_filepath, "w") as f:
-                dump(self.failed_items, f, indent=4)
-            print(f"\nZOTERO: Detail of failed items are saved into {out_filepath}\n")
+    def save_failed_items_to_json(self, json_filepath_failed_items: str = None):
+        FAILED_ITEMS_DIR.mkdir(parents=True, exist_ok=True)
+        if json_filepath_failed_items:
+            out_filepath = FAILED_ITEMS_DIR.joinpath(json_filepath_failed_items)
+        else:
+            out_filepath = FAILED_ITEMS_DIR.joinpath("failed_zotero_items.json")
+
+        with open(out_filepath, "w") as f:
+            dump(self.failed_items, f, indent=4)
+        print(f"\nZOTERO: Detail of failed items are saved into {out_filepath}\n")
