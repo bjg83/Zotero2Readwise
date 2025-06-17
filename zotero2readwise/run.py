@@ -5,6 +5,12 @@ from distutils.util import strtobool
 from zotero2readwise.helper import write_library_version, read_library_version
 from zotero2readwise.zt2rw import Zotero2Readwise
 
+from zotero2readwise.readwise import Readwise
+from zotero2readwise.logging_utils import setup_logger
+
+logger = setup_logger("zotero2readwise", log_file="zotero2readwise.log")
+rw = Readwise(readwise_token="...", logger=logger)
+
 # Define constants for argument help messages
 READWISE_TOKEN_HELP = "Readwise Access Token (visit https://readwise.io/access_token)"
 ZOTERO_KEY_HELP = "Zotero API key (visit https://www.zotero.org/settings/keys)"
