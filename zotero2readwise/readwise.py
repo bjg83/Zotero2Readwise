@@ -5,6 +5,8 @@ from typing import Dict, List, Optional, Union
 
 import requests
 
+import traceback
+
 import logging
 from .logging_utils import setup_logger
 
@@ -187,14 +189,15 @@ class Readwise:
 
     def save_failed_items_to_json(self, json_filepath_failed_items: str = None):
         FAILED_ITEMS_DIR.mkdir(parents=True, exist_ok=True)
-        if json_filepath_failed_items:
-            out_filepath = FAILED_ITEMS_DIR.joinpath(json_filepath_failed_items)
-        else:
-            out_filepath = FAILED_ITEMS_DIR.joinpath("failed_readwise_items.json")
-
+        out_filepath = FAILED_ITEMS_DIR.joinpath(json_filepath_failed_items or "failed_readwise_items.json")
+        output = []
+        for item in self.failed_highlights:
+            output.append({
+                "item": item,
+                "error": item.get("error", ""),
+            })
         with open(out_filepath, "w") as f:
-            dump(self.failed_highlights, f)
-        print(
-            f"{len(self.failed_highlights)} highlights failed to format (hence failed to upload to Readwise).\n"
-            f"Detail of failed items are saved into {out_filepath}"
+            dump(output, f)
+        self.logger.info(
+            f"{len(self.failed_highlights)} highlights failed to upload. Details in {out_filepath}"
         )
