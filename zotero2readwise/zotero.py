@@ -29,6 +29,8 @@ class ZoteroItem:
     page_label: Optional[str] = None
     color: Optional[str] = None
     relations: Optional[Dict] = field(init=True, default=None)
+    sort_index: Optional[int] = None  # ADD THIS LINE
+    parent_item_key: Optional[str] = None  # ADD THIS LINE for grouping
 
     def __post_init__(self):
         # Convert [{'tag': 'abc'}, {'tag': 'def'}] -->  ['abc', 'def']
@@ -178,7 +180,7 @@ class ZoteroAnnotationsNotes:
     self._cache[top_item_key] = metadata
     return metadata
 
-    def format_item(self, annot: Dict) -> ZoteroItem:
+   def format_item(self, annot: Dict) -> ZoteroItem:
         data = annot["data"]
         item_type = data["itemType"]
         annotation_type = data.get("annotationType")
@@ -226,9 +228,11 @@ class ZoteroAnnotationsNotes:
             page_label=data.get("annotationPageLabel"),
             color=data.get("annotationColor"),
             relations=data["relations"],
+            sort_index=data.get("annotationSortIndex"),  # ADD THIS LINE
+            parent_item_key=data.get("parentItem")  # ADD THIS LINE
         )
 
-    def format_items(self, annots: List[Dict]) -> List[ZoteroItem]:
+def format_items(self, annots: List[Dict]) -> List[ZoteroItem]:
         formatted_annots = []
         print(
             f"ZOTERO: Start formatting {len(annots)} annotations/notes...\n"
@@ -242,7 +246,10 @@ class ZoteroAnnotationsNotes:
             except:
                 self.failed_items.append(annot)
                 continue
-
+    
+        # SORT ANNOTATIONS BY READING ORDER
+        formatted_annots = self.sort_annotations_by_reading_order(formatted_annots)
+    
         finished_msg = "\nZOTERO: Formatting Zotero Items is completed!!\n\n"
         if self.failed_items:
             finished_msg += (
@@ -252,13 +259,22 @@ class ZoteroAnnotationsNotes:
         print(finished_msg)
         return formatted_annots
 
-    def save_failed_items_to_json(self, json_filepath_failed_items: str = None):
-        FAILED_ITEMS_DIR.mkdir(parents=True, exist_ok=True)
-        if json_filepath_failed_items:
-            out_filepath = FAILED_ITEMS_DIR.joinpath(json_filepath_failed_items)
-        else:
-            out_filepath = FAILED_ITEMS_DIR.joinpath("failed_zotero_items.json")
-
-        with open(out_filepath, "w") as f:
-            dump(self.failed_items, f, indent=4)
-        print(f"\nZOTERO: Detail of failed items are saved into {out_filepath}\n")
+        def sort_annotations_by_reading_order(self, formatted_annots: List[ZoteroItem]) -> List[ZoteroItem]:
+        """Sort annotations by document and reading order within each document"""
+        return sorted(formatted_annots, key=lambda x: (
+            x.parent_item_key or "",  # Group by document
+            x.sort_index if x.sort_index is not None else float('inf'),  # Then by sort index
+            x.page_label or "",  # Then by page label as fallback
+            x.annotated_at  # Finally by date as last resort
+        ))
+         
+def save_failed_items_to_json(self, json_filepath_failed_items: str = None):
+            FAILED_ITEMS_DIR.mkdir(parents=True, exist_ok=True)
+            if json_filepath_failed_items:
+                out_filepath = FAILED_ITEMS_DIR.joinpath(json_filepath_failed_items)
+            else:
+                out_filepath = FAILED_ITEMS_DIR.joinpath("failed_zotero_items.json")
+    
+            with open(out_filepath, "w") as f:
+                dump(self.failed_items, f, indent=4)
+            print(f"\nZOTERO: Detail of failed items are saved into {out_filepath}\n")
