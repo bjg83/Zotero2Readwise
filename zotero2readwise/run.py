@@ -2,10 +2,10 @@
 from argparse import ArgumentParser
 from distutils.util import strtobool
 
-from helper import write_library_version, read_library_version
-from logging_utils import setup_logger
-from readwise import Readwise
-from zt2rw import Zotero2Readwise
+from .helper import write_library_version, read_library_version
+from .logging_utils import setup_logger
+from .readwise import Readwise
+from .zt2rw import Zotero2Readwise
 
 logger = setup_logger("zotero2readwise", log_file="zotero2readwise.log")
 rw = Readwise(readwise_token="...", logger=logger)
