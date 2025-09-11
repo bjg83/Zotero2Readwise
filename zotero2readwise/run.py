@@ -1,5 +1,7 @@
 from argparse import ArgumentParser
 from distutils.util import strtobool
+import sys
+import traceback
 
 from zotero2readwise.helper import read_library_version, write_library_version
 from zotero2readwise.zt2rw import Zotero2Readwise
@@ -49,7 +51,7 @@ def main():
         ],
         action="append",
         default=[],
-        help="Filter Zotero annotations by given color | Options: '#ffd400' (yellow), '#ff6666' (red), '#5fb236' (green), '#2ea8e5' (blue), '#a28ae5' (purple), '#e56eee' (magenta), '#f19837' (orange), '#aaaaaa' (gray)",
+        help="Filter Zotero annotations by given color | Options: '#ffd400' (yellow), '#ff6666' (red), '#5fb236' (green), '#2ea8e5' (blue), '#a28ae5' (purple), '#e56eee' (magenta), '#f19837' (orange),[...]
     )
     parser.add_argument(
         "--filter_tags", action="append", default=[], help="Filter Zotero annotations by given tags"
@@ -78,22 +80,33 @@ def main():
             raise ValueError(f"Invalid value for --{bool_arg}. Use 'n' or 'y' (default).")
 
     since = read_library_version() if args["use_since"] else 0
-    zt2rw = Zotero2Readwise(
-        readwise_token=args["readwise_token"],
-        zotero_key=args["zotero_key"],
-        zotero_library_id=args["zotero_library_id"],
-        zotero_library_type=args["library_type"],
-        include_annotations=args["include_annotations"],
-        include_notes=args["include_notes"],
-        filter_colors=tuple(args["filter_color"]),
-        filter_tags=tuple(args["filter_tags"]),
-        include_filter_tags=args["include_filter_tags"],
-        since=since,
-        write_failures=not args["suppress_failures"],
-    )
-    zt2rw.run()
-    if args["use_since"]:
-        write_library_version(zt2rw.zotero_client)
+
+    try:
+        zt2rw = Zotero2Readwise(
+            readwise_token=args["readwise_token"],
+            zotero_key=args["zotero_key"],
+            zotero_library_id=args["zotero_library_id"],
+            zotero_library_type=args["library_type"],
+            include_annotations=args["include_annotations"],
+            include_notes=args["include_notes"],
+            filter_colors=tuple(args["filter_color"]),
+            filter_tags=tuple(args["filter_tags"]),
+            include_filter_tags=args["include_filter_tags"],
+            since=since,
+            write_failures=not args["suppress_failures"],
+        )
+        zt2rw.run()
+        if args["use_since"]:
+            write_library_version(zt2rw.zotero_client)
+
+    except Exception:
+        # Print full traceback to stdout for GitHub Actions log visibility
+        print("An error occurred during Zotero2Readwise sync!", file=sys.stderr)
+        traceback.print_exc()
+        # Optionally, write error to a log file for artifact upload
+        with open("run_error.log", "w") as f:
+            traceback.print_exc(file=f)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
