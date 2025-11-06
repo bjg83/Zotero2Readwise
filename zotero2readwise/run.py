@@ -1,12 +1,23 @@
 from argparse import ArgumentParser
 
-from distutils.util import strtobool
 import sys
 import traceback
 
 from zotero2readwise.helper import read_library_version, write_library_version
 from zotero2readwise.zt2rw import Zotero2Readwise
 
+def strtobool(val):
+    """Convert a string representation of truth to true (1) or false (0).
+    
+    Replaces deprecated distutils.util.strtobool removed in Python 3.12.
+    """
+    val = val.lower()
+    if val in ('y', 'yes', 't', 'true', 'on', '1'):
+        return 1
+    elif val in ('n', 'no', 'f', 'false', 'off', '0'):
+        return 0
+    else:
+        raise ValueError(f"invalid truth value {val!r}")
 
 def main():
     parser = ArgumentParser(description="Generate Markdown files")
