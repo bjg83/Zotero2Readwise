@@ -1,4 +1,5 @@
 from argparse import ArgumentParser
+
 from distutils.util import strtobool
 import sys
 import traceback
@@ -54,7 +55,10 @@ def main():
         help="Filter Zotero annotations by given color | Options: '#ffd400' (yellow), '#ff6666' (red), '#5fb236' (green), '#2ea8e5' (blue), '#a28ae5' (purple), '#e56eee' (magenta), '#f19837' (orange),[...]
     )
     parser.add_argument(
-        "--filter_tags", action="append", default=[], help="Filter Zotero annotations by given tags"
+        "--filter_tags",
+        action="append",
+        default=[],
+        help="Filter Zotero annotations by given tags",
     )
     parser.add_argument(
         "--include_filter_tags",
