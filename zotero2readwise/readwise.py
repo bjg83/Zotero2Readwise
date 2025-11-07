@@ -57,20 +57,27 @@ class Readwise:
         self.failed_highlights: list = []
 
     def create_highlights(self, highlights: list[dict]) -> None:
-        resp = requests.post(
-            url=self.endpoints.highlights,
-            headers=self._header,
-            json={"highlights": highlights},
+    resp = requests.post(
+        url=self.endpoints.highlights,
+        headers=self._header,
+        json={"highlights": highlights},
+    )
+    if resp.status_code != 200:
+        error_log_file = f"error_log_{resp.status_code}_failed_post_request_to_readwise.json"
+        with open(error_log_file, "w", encoding="utf-8") as f:
+            try:
+                if resp.text:  # Check if response has content
+                    dump(resp.json(), f, indent=4, ensure_ascii=False)
+                else:
+                    f.write(f"Empty response with status code {resp.status_code}")
+            except (ValueError, requests.exceptions.JSONDecodeError):
+                # Response was not valid JSON, save raw text instead
+                f.write(f"Non-JSON response: {resp.text}")
+        raise Zotero2ReadwiseError(
+            f"Uploading to Readwise failed with following details:\n"
+            f"POST request Status Code={resp.status_code} ({resp.reason})\n"
+            f"Error log is saved to {error_log_file} file."
         )
-        if resp.status_code != 200:
-            error_log_file = f"error_log_{resp.status_code}_failed_post_request_to_readwise.json"
-            with open(error_log_file, "w", encoding="utf-8") as f:
-                dump(resp.json(), f, indent=4, ensure_ascii=False)
-            raise Zotero2ReadwiseError(
-                f"Uploading to Readwise failed with following details:\n"
-                f"POST request Status Code={resp.status_code} ({resp.reason})\n"
-                f"Error log is saved to {error_log_file} file."
-            )
 
     @staticmethod
     def convert_tags_to_readwise_format(tags: list[str]) -> str:
