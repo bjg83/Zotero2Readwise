@@ -137,7 +137,7 @@ class Readwise:
         self,
         highlights: list[dict],
         batch_size: int = 500,
-        batch_delay: float = 2.0,
+        batch_delay: float = 0.5,
         max_retries: int = 3,
         retry_delay: float = 10.0,
     ) -> None:
@@ -149,7 +149,7 @@ class Readwise:
         Args:
             highlights: List of highlight dictionaries to upload.
             batch_size: Number of highlights per API request (default: 500).
-            batch_delay: Seconds to wait between successful batches (default: 2).
+            batch_delay: Seconds to wait between successful batches (default: 0.5).
             max_retries: Number of retry attempts on failure (default: 3).
             retry_delay: Base seconds to wait before retrying (multiplied by attempt number).
 
@@ -178,7 +178,11 @@ class Readwise:
 
                 # Retryable server-side errors
                 if resp.status_code in (429, 502, 503) and attempt < max_retries:
-                    wait = retry_delay * attempt
+                    if resp.status_code == 429:
+                        # Respect the Retry-After header if present (Readwise rate limit: 240 req/min)
+                        wait = int(resp.headers.get("Retry-After", retry_delay * attempt))
+                    else:
+                        wait = retry_delay * attempt
                     print(
                         f"  Batch {batch_num} failed with {resp.status_code} "
                         f"(attempt {attempt}/{max_retries}). Retrying in {wait:.0f}s..."
