@@ -312,11 +312,20 @@ class Readwise:
             Annotations with text exceeding 8191 characters are skipped
             and added to failed_highlights.
         """
-        # Sort by annotated_at descending so recent highlights upload first
+        # Sort so most recently annotated documents come first,
+        # while preserving reading order (sort_index) within each document.
+        # Strategy: find the latest annotated_at per document title, then
+        # sort by that descending, with sort_index as the secondary key.
         if recent_first:
+            doc_latest: dict[str, str] = {}
+            for a in zotero_annotations:
+                title = a.title or ""
+                ts = a.annotated_at or ""
+                if title not in doc_latest or ts > doc_latest[title]:
+                    doc_latest[title] = ts
             zotero_annotations = sorted(
                 zotero_annotations,
-                key=lambda a: a.annotated_at or "",
+                key=lambda a: (doc_latest.get(a.title or "", ""), a.sort_index or ""),
                 reverse=True,
             )
 
