@@ -10,6 +10,7 @@ Classes:
     Readwise: Main client class for Readwise API operations.
 """
 
+import time
 from dataclasses import dataclass
 from enum import Enum
 from json import dump
@@ -132,39 +133,85 @@ class Readwise:
         self.failed_highlights: list = []
         self.custom_tag = custom_tag
 
-    def create_highlights(self, highlights: list[dict]) -> None:
-        """Upload highlights to Readwise API.
+    def create_highlights(
+        self,
+        highlights: list[dict],
+        batch_size: int = 500,
+        batch_delay: float = 2.0,
+        max_retries: int = 3,
+        retry_delay: float = 10.0,
+    ) -> None:
+        """Upload highlights to Readwise API in batches.
+
+        Splits highlights into batches to avoid overwhelming the API,
+        with retries on transient errors (502, 503, 429).
 
         Args:
             highlights: List of highlight dictionaries to upload.
+            batch_size: Number of highlights per API request (default: 500).
+            batch_delay: Seconds to wait between successful batches (default: 2).
+            max_retries: Number of retry attempts on failure (default: 3).
+            retry_delay: Base seconds to wait before retrying (multiplied by attempt number).
 
         Raises:
-            Zotero2ReadwiseError: If the API request fails (non-200 status).
+            Zotero2ReadwiseError: If a batch fails after all retries.
         """
-        resp = requests.post(
-            url=self.endpoints.highlights,
-            headers=self._header,
-            json={"highlights": highlights},
-        )
-        if resp.status_code != 200:
-            error_log_file = f"error_log_{resp.status_code}_failed_post_request_to_readwise.json"
-            # Handle empty or invalid JSON responses gracefully
-            try:
-                error_content = (
-                    resp.json() if resp.text.strip() else {"error": "Empty response body"}
-                )
-            except ValueError:
-                error_content = {
-                    "error": "Invalid JSON response",
-                    "raw_response": resp.text[:500],
-                }
-            with open(error_log_file, "w", encoding="utf-8") as f:
-                dump(error_content, f, indent=4, ensure_ascii=False)
-            raise Zotero2ReadwiseError(
-                f"Uploading to Readwise failed with following details:\n"
-                f"POST request Status Code={resp.status_code} ({resp.reason})\n"
-                f"Error log is saved to {error_log_file} file."
+        total = len(highlights)
+        num_batches = -(-total // batch_size)  # ceiling division
+
+        for batch_num, i in enumerate(range(0, total, batch_size), start=1):
+            batch = highlights[i : i + batch_size]
+            print(
+                f"  Uploading batch {batch_num}/{num_batches} "
+                f"({i + 1}–{min(i + batch_size, total)} of {total})..."
             )
+
+            for attempt in range(1, max_retries + 1):
+                resp = requests.post(
+                    url=self.endpoints.highlights,
+                    headers=self._header,
+                    json={"highlights": batch},
+                )
+
+                if resp.status_code == 200:
+                    break  # Success
+
+                # Retryable server-side errors
+                if resp.status_code in (429, 502, 503) and attempt < max_retries:
+                    wait = retry_delay * attempt
+                    print(
+                        f"  Batch {batch_num} failed with {resp.status_code} "
+                        f"(attempt {attempt}/{max_retries}). Retrying in {wait:.0f}s..."
+                    )
+                    time.sleep(wait)
+                    continue
+
+                # Non-retryable or out of retries
+                error_log_file = (
+                    f"error_log_{resp.status_code}_failed_post_request_to_readwise.json"
+                )
+                try:
+                    error_content = (
+                        resp.json()
+                        if resp.text.strip()
+                        else {"error": "Empty response body"}
+                    )
+                except ValueError:
+                    error_content = {
+                        "error": "Invalid JSON response",
+                        "raw_response": resp.text[:500],
+                    }
+                with open(error_log_file, "w", encoding="utf-8") as f:
+                    dump(error_content, f, indent=4, ensure_ascii=False)
+                raise Zotero2ReadwiseError(
+                    f"Uploading to Readwise failed with following details:\n"
+                    f"POST request Status Code={resp.status_code} ({resp.reason})\n"
+                    f"Error log is saved to {error_log_file} file."
+                )
+
+            # Pause between batches to be polite to the API
+            if batch_num < num_batches:
+                time.sleep(batch_delay)
 
     @staticmethod
     def convert_tags_to_readwise_format(tags: list[str] | None) -> str:
@@ -243,19 +290,36 @@ class Readwise:
             location=location,
         )
 
-    def post_zotero_annotations_to_readwise(self, zotero_annotations: list[ZoteroItem]) -> None:
+    def post_zotero_annotations_to_readwise(
+        self,
+        zotero_annotations: list[ZoteroItem],
+        recent_first: bool = True,
+        batch_size: int = 500,
+    ) -> None:
         """Upload Zotero annotations to Readwise.
 
         Converts each ZoteroItem to a ReadwiseHighlight and uploads them
-        in batch. Handles errors gracefully, storing failed items.
+        in batches. Optionally sorts by recency so the most recent annotations
+        are uploaded first. Handles errors gracefully, storing failed items.
 
         Args:
             zotero_annotations: List of ZoteroItem instances to upload.
+            recent_first: If True, sort annotations by date (newest first)
+                so recent highlights appear in Readwise first (default: True).
+            batch_size: Number of highlights per API request (default: 500).
 
         Note:
             Annotations with text exceeding 8191 characters are skipped
             and added to failed_highlights.
         """
+        # Sort by annotated_at descending so recent highlights upload first
+        if recent_first:
+            zotero_annotations = sorted(
+                zotero_annotations,
+                key=lambda a: a.annotated_at or "",
+                reverse=True,
+            )
+
         print(
             f"\nReadwise: Push {len(zotero_annotations)} Zotero annotations/notes to Readwise...\n"
             f"It may take some time depending on the number of highlights...\n"
@@ -287,12 +351,13 @@ class Readwise:
                 print(f"Warning: Failed to convert item {annot.key}: {type(e).__name__}: {e}")
                 continue  # Go to next annot
             rw_highlights.append(rw_highlight.get_nonempty_params())
-        self.create_highlights(rw_highlights)
+
+        self.create_highlights(rw_highlights, batch_size=batch_size)
 
         finished_msg = ""
         if self.failed_highlights:
             finished_msg = (
-                f"\nNOTE: {len(self.failed_highlights)} highlights (out of {len(self.failed_highlights)}) failed "
+                f"\nNOTE: {len(self.failed_highlights)} highlights failed "
                 f"to upload to Readwise.\n"
             )
 
