@@ -6,6 +6,7 @@ synchronization from the command line.
 Example:
     $ zotero2readwise <readwise_token> <zotero_key> <zotero_library_id>
     $ zotero2readwise --include_notes y --filter_color "#ffd400"
+    $ zotero2readwise --use_since --batch_size 250 --recent_first y
 
 Environment Variables:
     READWISE_TOKEN: Readwise API access token
@@ -140,6 +141,20 @@ def main() -> None:
         default=None,
         help="Add a custom tag to all highlights (e.g., 'zotero' will add '.zotero' tag to all highlights)",
     )
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=500,
+        help="Number of highlights to upload per API request (default: 500). "
+             "Reduce if you hit 502 errors with large libraries.",
+    )
+    parser.add_argument(
+        "--recent_first",
+        type=str,
+        default="y",
+        help="Upload most recently annotated documents first, with highlights in "
+             "reading order within each document | Options: 'y'/'yes' (default), 'n'/'no'",
+    )
 
     args = vars(parser.parse_args())
 
@@ -156,7 +171,7 @@ def main() -> None:
         )
 
     # Cast str to bool values for bool flags
-    for bool_arg in ["include_annotations", "include_notes"]:
+    for bool_arg in ["include_annotations", "include_notes", "recent_first"]:
         try:
             args[bool_arg] = bool(strtobool(args[bool_arg]))
         except ValueError:
@@ -177,7 +192,10 @@ def main() -> None:
         write_failures=not args["suppress_failures"],
         custom_tag=args["custom_tag"],
     )
-    zt2rw.run()
+    zt2rw.run(
+        batch_size=args["batch_size"],
+        recent_first=args["recent_first"],
+    )
     if args["use_since"]:
         write_library_version(zt2rw.zotero_client)
 
