@@ -163,7 +163,8 @@ class Readwise:
             batch = highlights[i : i + batch_size]
             print(
                 f"  Uploading batch {batch_num}/{num_batches} "
-                f"({i + 1}–{min(i + batch_size, total)} of {total})..."
+                f"({i + 1}–{min(i + batch_size, total)} of {total})...",
+                flush=True,
             )
 
             for attempt in range(1, max_retries + 1):
