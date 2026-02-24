@@ -314,8 +314,10 @@ class Readwise:
         """
         # Sort so most recently annotated documents come first,
         # while preserving reading order (sort_index) within each document.
-        # Strategy: find the latest annotated_at per document title, then
-        # sort by that descending, with sort_index as the secondary key.
+        # Two-pass approach using Python's stable sort:
+        #   Pass 1: sort by sort_index ascending (reading order within doc).
+        #   Pass 2: stable-sort by doc recency descending — because sort is
+        #           stable, highlights within each doc stay in reading order.
         if recent_first:
             doc_latest: dict[str, str] = {}
             for a in zotero_annotations:
@@ -323,9 +325,15 @@ class Readwise:
                 ts = a.annotated_at or ""
                 if title not in doc_latest or ts > doc_latest[title]:
                     doc_latest[title] = ts
+            # Pass 1: reading order within each doc
             zotero_annotations = sorted(
                 zotero_annotations,
-                key=lambda a: (doc_latest.get(a.title or "", ""), a.sort_index or ""),
+                key=lambda a: a.sort_index or "",
+            )
+            # Pass 2: newest doc first, reading order preserved via stability
+            zotero_annotations = sorted(
+                zotero_annotations,
+                key=lambda a: doc_latest.get(a.title or "", ""),
                 reverse=True,
             )
 
