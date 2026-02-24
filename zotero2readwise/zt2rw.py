@@ -96,11 +96,10 @@ class Zotero2Readwise:
         self.write_failures = write_failures
 
     def get_all_zotero_items(self) -> list[dict]:
-        """
-        Retrieves all Zotero items of the specified types (notes and/or annotations) that were modified since the specified date.
+        """Retrieve all Zotero items of the specified types modified since the given timestamp.
 
         Returns:
-        A list of dictionaries representing the retrieved Zotero items.
+            A list of dictionaries representing the retrieved Zotero items.
         """
         items = []
         if self.include_annots:
@@ -113,18 +112,27 @@ class Zotero2Readwise:
 
         return items
 
-    def run(self, zot_annots_notes: list[dict] | None = None) -> None:
+    def run(
+        self,
+        zot_annots_notes: list[dict] | None = None,
+        batch_size: int = 500,
+        recent_first: bool = True,
+    ) -> None:
         """Execute the synchronization process.
 
         This method orchestrates the full sync workflow:
         1. Retrieves Zotero items (if not provided)
         2. Formats items into ZoteroItem objects
         3. Saves any failed items to JSON (if write_failures is True)
-        4. Uploads formatted items to Readwise
+        4. Uploads formatted items to Readwise in batches
 
         Args:
             zot_annots_notes: Optional list of raw Zotero annotation/note dictionaries.
                 If not provided, items will be retrieved from Zotero API.
+            batch_size: Number of highlights per Readwise API request (default: 500).
+                Reduce if you encounter 502 errors with large libraries.
+            recent_first: If True, upload most recently annotated documents first,
+                with highlights in reading order within each document (default: True).
         """
         if zot_annots_notes is None:
             zot_annots_notes = self.get_all_zotero_items()
@@ -134,18 +142,21 @@ class Zotero2Readwise:
         if self.write_failures and self.zotero.failed_items:
             self.zotero.save_failed_items_to_json("failed_zotero_items.json")
 
-        self.readwise.post_zotero_annotations_to_readwise(formatted_items)
+        self.readwise.post_zotero_annotations_to_readwise(
+            formatted_items,
+            batch_size=batch_size,
+            recent_first=recent_first,
+        )
 
     def retrieve_all(self, item_type: str, since: int = 0):
-        """
-        Retrieves all items of a given type from Zotero Database since a given timestamp.
+        """Retrieve all items of a given type from Zotero since a given timestamp.
 
         Args:
-            item_type (str): Either "annotation" or "note".
-            since (int): Timestamp in seconds since the Unix epoch. Defaults to 0.
+            item_type: Either "annotation" or "note".
+            since: Unix timestamp in seconds. Defaults to 0 (retrieve all).
 
         Returns:
-            List[Dict]: List of dictionaries containing the retrieved items.
+            List of dictionaries containing the retrieved items.
         """
         if item_type not in ["annotation", "note"]:
             raise ValueError("item_type must be either 'annotation' or 'note'")
