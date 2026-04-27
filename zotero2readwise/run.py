@@ -197,7 +197,13 @@ def main() -> None:
         recent_first=args["recent_first"],
     )
     if args["use_since"]:
-        write_library_version(zt2rw.zotero_client)
+        try:
+            write_library_version(zt2rw.zotero_client)
+        except Exception as e:
+            print(
+                f"Warning: Could not update library version after sync: {e}\n"
+                f"The sync completed successfully. Next run will re-fetch from the previous checkpoint."
+            )
 
 
 if __name__ == "__main__":
